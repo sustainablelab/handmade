@@ -1,0 +1,4 @@
+- MSYS2
+- MinGW64
+- subst -- get a `w:` drive
+- debugger
