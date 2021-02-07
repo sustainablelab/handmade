@@ -1,4 +1,4 @@
 - MSYS2
 - MinGW64
 - subst -- get a `w:` drive
-- debugger
+- lldb -- debugger to replace VisualStudio and gdb
