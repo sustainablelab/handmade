@@ -1,4 +1,4 @@
 CFLAGS = -g
 
-../build/out.exe: win32_handmade.cpp
+../build/win32_handmade.exe: win32_handmade.cpp
 	cc $(CFLAGS) $< -o $@

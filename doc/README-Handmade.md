@@ -377,3 +377,12 @@ things on screen. This lets us see the message in the debugger.
 Trouble is, I'm looking for a way to see these messages without
 installing VisualStudio.
 
+One kludgey way is to use `DebugView`:
+
+https://docs.microsoft.com/en-us/sysinternals/downloads/debugview#installation-and-use
+
+This is a small utility that listens for debug messages. Run the
+utility. Then simply run the executable built with `-g`. Do not
+run with the debugger, that suppresses the messages somehow. Just
+run the executable by calling it from PowerShell.
+
