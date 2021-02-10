@@ -1,7 +1,10 @@
 # TLDR
-Install VisualStudio Community. Unclick all the garbage, just get
-the core VisualStudio (~1.5GB) and the MSVC compiler tools
-(~1.5GB).
+Install VisualStudio Community. Unclick all the garbage, just
+get:
+
+- the core VisualStudio (~1.5GB)
+- the MSVC compiler tools (~1.5GB)
+- the latest Win10SDK (~3GB)
 
 Update PowerShell Profile with a `vcvars` command to run the
 `vcvarsall.bat` script that sets the environment variables. This
@@ -36,3 +39,5 @@ recognized command from Cygwin.
   compiler, I can go back to using Cygwin -- there is no reason
   to work from within a MinGW shell, I'm not using any of its
   tools anymore.
+- Somehow MinGW has `<windows.h>`, but in VisualStudio it's
+  another 3GB module to install...

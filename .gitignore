@@ -3,3 +3,5 @@
 *.[oa]
 *.exe
 *.vs
+*.ilk
+*.pdb
