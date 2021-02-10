@@ -1,14 +1,14 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
-VisualStudioVersion = 16.0.30907.101
+VisualStudioVersion = 16.0.31005.135
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "out", "out.exe", "{63D7C442-73B9-4B0C-8EDE-50CAB11285F3}"
+Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "win32_handmade", "win32_handmade.exe", "{7583A4B6-2AB1-4352-95C0-228FC8EBE8FC}"
 	ProjectSection(DebuggerProjectSystem) = preProject
 		PortSupplier = 00000000-0000-0000-0000-000000000000
-		Executable = C:\msys64\home\mike\work\handmade\build\out.exe
+		Executable = C:\msys64\home\mike\work\handmade\build\win32_handmade.exe
 		RemoteMachine = DESKTOP-H26981V
-		StartingDirectory = C:\msys64\home\mike\work\handmade\build
+		StartingDirectory = C:\msys64\home\mike\work\handmade\data
 		Environment = Default
 		LaunchingEngine = 00000000-0000-0000-0000-000000000000
 		UseLegacyDebugEngines = No
@@ -21,12 +21,12 @@ Global
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{63D7C442-73B9-4B0C-8EDE-50CAB11285F3}.Release|x64.ActiveCfg = Release|x64
+		{7583A4B6-2AB1-4352-95C0-228FC8EBE8FC}.Release|x64.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {43FAF9E4-8C48-4640-95B0-C804371EA219}
+		SolutionGuid = {39B896F4-8E8D-435F-BEB4-FD4309864C8E}
 	EndGlobalSection
 EndGlobal
