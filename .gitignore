@@ -2,6 +2,7 @@
 *.sw?
 *.[oa]
 *.exe
+*.obj
 *.vs
 *.ilk
 *.pdb

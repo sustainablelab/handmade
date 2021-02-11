@@ -8,23 +8,21 @@
 #include <windows.h>
 
 LRESULT CALLBACK
-MainWindowCallback(
-    HWND Window, // handle to the Window
-    UINT Message, // https://docs.microsoft.com/en-us/windows/win32/winmsg/window-notifications
-    WPARAM wParam,
-    LPARAM lParam
+MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
+    HWND Window,    // Handle to the Window
+    UINT Message,   // "Window Notification" from Windows OS
+    WPARAM wParam,  // Message-dependent data
+    LPARAM lParam   // Message-dependent data
     )
 {
-    /* Default: the Message from Windows was handled OK. */
+    /* Default: OK (handled the message). */
     LRESULT Result = 0;
 
     // Use OutputDebugString() to test these cases.
+    // (OutputDebugString is like a printf to a debug stream).
     // https://docs.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-outputdebugstringa
-    // Interact with the window to generate the event.
-    // That triggers this callback.
-    // OutputDebugString tells the debugger to break.
-    // Continue debugger execution.
-    // Repeat, but interacting to test a different case.
+    // Interact with the window (change size, focus, click close).
+    // That generates the event (Window Notification) that triggers this callback.
     switch(Message)
     {
         case WM_SIZE: // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-size
@@ -60,31 +58,24 @@ MainWindowCallback(
 
 int CALLBACK
 WinMain(
-    HINSTANCE Instance,
-    HINSTANCE PrevInstance,
-    LPSTR     CommandLine,
-    int       ShowCode
+    HINSTANCE Instance,     // Handle to application instance
+    HINSTANCE PrevInstance, // Handle to previous instance of this application
+    LPSTR     CommandLine,  // not important
+    int       ShowCode      // not important
     )
 {
-    WNDCLASSA WindowClass = {}; // initialize all to 0
+    // Create a WindowClass to register for creating a window.
+    WNDCLASSA WindowClass = {}; // zero-initialize (all don't-care vars are 0)
 
-    /* https://docs.microsoft.com/en-us/windows/win32/winmsg/window-class-styles */
-    // TODO: check if HREDRAW, VREDRAW, OWNDC still matter
     WindowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
-
-
-    // Define window procedure: handle msg from Windows
-    /* https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms633573(v=vs.85) */
     WindowClass.lpfnWndProc = MainWindowCallback;
-
     WindowClass.hInstance = Instance;
-    /* WindowClass.hIcon = ; */
-    /* WindowClass.hIconSm = ; */
     WindowClass.lpszClassName = "HandmadeHeroWindowClass";
 
-    /* if (RegisterClassExA(&WindowClass)) */
     if (RegisterClass(&WindowClass))
     {
+        // Uncomment the following line to work on Vim's getqflist() errorformat:
+        /* HWND WindowHandle = CreateWindow( */ 
         HWND WindowHandle = CreateWindowExA(
                                 0, // DWORD dwExStyle,
                                 WindowClass.lpszClassName, // LPCSTR lpClassName,
@@ -99,7 +90,7 @@ WinMain(
                                 Instance, // HINSTANCE hInstance,
                                 0 // LPVOID    lpParam
                                 );
-        if (WindowHandle) // 
+        if (WindowHandle) //
         {
             MSG Message;
             for(;;)
