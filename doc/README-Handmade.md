@@ -47,8 +47,27 @@ Fix:
 
 - change the indentation to four spaces
 - include `windows.h`
+    - on my computer, `windows.h` is here:
+    - `C:\Program Files (x86)\Windows Kits\10\include\10.0.18362.0\um\Windows.h`
 - add an empty body that returns 0 (OK)
 - erase `__clrcall`:
+
+I found `windows.h` by accident.
+I called a win32 function with the wrong name and got this error
+message from the compiler:
+
+```
+win32_handmade.cpp|92| warning C4002: too many arguments for function-like macro invocation 'CreateWindowA'
+win32_handmade.cpp|78| error C2664: 'HWND CreateWindowExA(DWORD,LPCSTR,LPCSTR,DWORD,int,int,int,int,HWND,HMENU,HINSTANCE,LPVOID)': cannot convert argument 4 from 'const char [14]' to 'DWORD'
+win32_handmade.cpp|78| note: There is no context in which this conversion is possible
+C:\Program Files (x86)\Windows Kits\10\include\10.0.18362.0\um\winuser.h|4420| note: see declaration of 'CreateWindowExA'
+make: *** [Makefile|6| ..\build\win32_handmade.exe] Error 2
+```
+
+And I wasn't actually reading the error message. I was using Vim
+to jump though the error list. Vim takes my cursor to the
+location of the error, so when Vim got to the error on line 78 it
+jumped me to line 4420 of the `winuser.h` file.
 
 ```c
 #include <windows.h>
@@ -158,6 +177,39 @@ than a few seconds. So in a way, forcing a rebuild every time
 forces him to be more disciplined as an engineer. I am looking
 forward to that!
 
+## make with MSVC compiler
+
+So I switched to VisualStudio for the debugger. That forced me to
+install the compiler tool and the Windows SDK. Something like 6GB
+total instead of 1.5GB. OK, fine.
+
+The updated Makefile looks like this:
+
+```make
+# https://docs.microsoft.com/en-us/cpp/build/reference/compiler-options-listed-by-category?view=msvc-160
+CFLAGS = /Zi
+IMPORTLIBS = user32.lib
+
+..\build\win32_handmade.exe: win32_handmade.cpp
+	cl.exe $(CFLAGS) $(IMPORTLIBS) $< /Fe"$@"
+```
+
+That link on top is where I can view all the compiler flags.
+
+To see what the recipe expands to, use `make -n`.
+
+Instead of just `:make`, I made Vim shortcut `;m<Space>` which
+invokes `:make -B`. The `-B` flag forces `make` to rebuild
+everything. Vim's errorformat works out-of-the-box with the MSVC
+compiler (people on the internet say it doesn't and you have to
+modify `errorformat` but I didn't have that problem). My shortcut
+also opens the quickfix window and puts the cursor on the line
+with the first error. So I have all the nice features I'm used to
+and I'm still using Casey's style in the ways that matter.
+
+Another reason I'm dropping conditional builds is to get in the
+Jonathan Blow's mindset for JAI which I'm looking forward to
+adopting when it's available.
 
 ## Debug
 Use `gdb` instead of VisualStudio.

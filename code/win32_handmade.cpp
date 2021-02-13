@@ -74,8 +74,6 @@ WinMain(
 
     if (RegisterClass(&WindowClass))
     {
-        // Uncomment the following line to work on Vim's getqflist() errorformat:
-        /* HWND WindowHandle = CreateWindow( */ 
         HWND WindowHandle = CreateWindowExA(
                                 0, // DWORD dwExStyle,
                                 WindowClass.lpszClassName, // LPCSTR lpClassName,
@@ -99,12 +97,7 @@ WinMain(
                 //     . 0 on quit
                 //     . nonzero on other messages
                 //     . -1 on error
-                BOOL MessageResult = GetMessage(
-                      &Message, // LPMSG lpMsg,
-                      0, // HWND  hWnd,
-                      0, // UINT  wMsgFilterMin,
-                      0  // UINT  wMsgFilterMax
-                      );
+                BOOL MessageResult = GetMessage(&Message, 0, 0, 0);
                 if (MessageResult > 0)
                 {
                     // Translate keyboard messages
