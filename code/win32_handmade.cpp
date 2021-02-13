@@ -45,6 +45,18 @@ MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
             OutputDebugStringA("WM_ACTIVATEAPP\n");
         } break;
 
+        case WM_PAINT:
+        {
+            PAINTSTRUCT Paint;
+            HDC DeviceContext = BeginPaint(Window, &Paint);
+            int x = Paint.rcPaint.left;
+            int y = Paint.rcPaint.top;
+            int w = Paint.rcPaint.right - Paint.rcPaint.left;
+            int h = Paint.rcPaint.bottom - Paint.rcPaint.top;
+            DWORD Operation = BLACKNESS;
+            PatBlt(DeviceContext, x, y, w, h, Operation);
+            EndPaint(Window, &Paint);
+        } break;
         default:
         {
             /* OutputDebugStringA("default\n"); */

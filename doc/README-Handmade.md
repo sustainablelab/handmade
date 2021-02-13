@@ -438,3 +438,9 @@ utility. Then simply run the executable built with `-g`. Do not
 run with the debugger, that suppresses the messages somehow. Just
 run the executable by calling it from PowerShell.
 
+
+# Tips
+
+## do not use `static` in production
+
+but `static` is great for debugging
