@@ -7,8 +7,11 @@
 
 #include <windows.h>
 
+#define local_persist static
+#define global_variable static
+
 // TODO(sustainablelab): This is a global for now.
-static bool Running = true;
+global_variable bool Running;
 
 LRESULT CALLBACK
 MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
@@ -59,8 +62,16 @@ MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
             int y = Paint.rcPaint.top;
             int w = Paint.rcPaint.right - Paint.rcPaint.left;
             int h = Paint.rcPaint.bottom - Paint.rcPaint.top;
-            DWORD Operation = BLACKNESS;
+            local_persist DWORD Operation = BLACKNESS;
             PatBlt(DeviceContext, x, y, w, h, Operation);
+            if (Operation == BLACKNESS)
+            {
+                Operation = WHITENESS;
+            }
+            else
+            {
+                Operation = BLACKNESS;
+            }
             EndPaint(Window, &Paint);
         } break;
         default:
@@ -110,6 +121,7 @@ WinMain(
         if (WindowHandle) //
         {
             MSG Message;
+            Running = true;
             while(Running)
             {
                 // GetMessage returns:
