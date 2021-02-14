@@ -4,3 +4,4 @@
 ;Alt<Left-Arrow/Right-Arrow> -- jump between errors
 ;t<Space> -- close quickfix window
 VisualStudio: F5, Shift+F5
+;K -- DuckDuckGo for WinAPI stuff

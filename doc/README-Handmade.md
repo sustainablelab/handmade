@@ -441,6 +441,11 @@ run the executable by calling it from PowerShell.
 
 # Tips
 
-## do not use `static` in production
+## do not use `static` (local_persist) in production
 
 but `static` is great for debugging
+
+## do use `static` (global_variable) in production
+
+- init to 0
+- keep symbol private to translation unit
