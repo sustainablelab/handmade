@@ -7,6 +7,9 @@
 
 #include <windows.h>
 
+// TODO(sustainablelab): This is a global for now.
+static bool Running = true;
+
 LRESULT CALLBACK
 MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
     HWND Window,    // Handle to the Window
@@ -30,15 +33,18 @@ MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
             OutputDebugStringA("WM_SIZE\n");
         } break;
 
-        case WM_DESTROY:
-        {
-            OutputDebugStringA("WM_DESTROY\n");
-        } break;
-
         case WM_CLOSE:
         {
-            OutputDebugStringA("WM_CLOSE\n");
+            // TODO(sustainablelab): Handle this with a message to the user?
+            Running = false;
         } break;
+
+        case WM_DESTROY:
+        {
+            // TODO(sustainablelab): Handle this as an error - recreate window?
+            Running = false;
+        } break;
+
 
         case WM_ACTIVATEAPP:
         {
@@ -80,6 +86,7 @@ WinMain(
     WNDCLASSA WindowClass = {}; // zero-initialize (all don't-care vars are 0)
 
     WindowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
+    // Pointer to func that handles windows notifications
     WindowClass.lpfnWndProc = MainWindowCallback;
     WindowClass.hInstance = Instance;
     WindowClass.lpszClassName = "HandmadeHeroWindowClass";
@@ -103,7 +110,7 @@ WinMain(
         if (WindowHandle) //
         {
             MSG Message;
-            for(;;)
+            while(Running)
             {
                 // GetMessage returns:
                 //     . 0 on quit
