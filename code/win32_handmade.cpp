@@ -177,7 +177,7 @@ WinMain(
     // Create a WindowClass to register for creating a window.
     WNDCLASSA WindowClass = {}; // zero-initialize (all don't-care vars are 0)
 
-    WindowClass.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
+    WindowClass.style = CS_HREDRAW | CS_VREDRAW;
     // Pointer to func that handles windows notifications
     WindowClass.lpfnWndProc = Win32MainWindowCallback;
     WindowClass.hInstance = Instance;
