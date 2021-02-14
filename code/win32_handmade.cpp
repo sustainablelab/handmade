@@ -21,7 +21,39 @@ global_variable BITMAPINFO BitmapInfo;
 global_variable void *BitmapMemory;
 global_variable int BitmapWidth;
 global_variable int BitmapHeight;
+global_variable const int BytesPerPixel = 4;
 
+internal void
+RenderWeirdGradient(int XOffset, int YOffset)
+{
+    int Pitch = BitmapWidth*BytesPerPixel;
+    uint8 *Row = (uint8 *)BitmapMemory;
+    for(int Y = 0;
+        Y < BitmapHeight;
+        ++Y)
+    {
+        uint32 *Pixel = (uint32 *)Row;
+        for(int X = 0; X < BitmapWidth; ++X)
+        {
+            /*
+             *          byte:    0  1  2  3
+             * Pixel in memory: RR GG BB XX
+             * LITTLE ENDIAN ARCHITECTURE maps that like this:
+             * 0x XXBBGGRR
+             * Windows API creators wanted it to read like this:
+             * 0x XXRRGGBB
+             * Therefore the byte order is actually:
+             *          byte:    0  1  2  3
+             * Pixel in memory: BB GG RR XX
+             * */
+            uint8 Blue = (uint8)(X + XOffset);
+            uint8 Green = (uint8)(Y + YOffset);
+            uint8 Red = XOffset * YOffset;
+            *Pixel++ = Blue | (Green << 8) | (Red << 16);
+        }
+        Row += Pitch;
+    }
+}
 
 // DIB -- Device Independent Bitmap
 internal void
@@ -43,44 +75,17 @@ Win32ResizeDIBSection(int Width, int Height)
     BitmapInfo.bmiHeader.biCompression = BI_RGB;
 
     // NOTE(sustainablelab): Thanks Chris Hecker.
-    int BytesPerPixel = 4;
     int BitmapMemorySize = (BitmapWidth*BitmapHeight)*BytesPerPixel;
     BitmapMemory = VirtualAlloc(0, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
 
-    int Pitch = BitmapWidth*BytesPerPixel;
-    uint8 *Row = (uint8 *)BitmapMemory;
-    for(int Y = 0;
-        Y < BitmapHeight;
-        ++Y)
-    {
-        uint8 *Pixel = (uint8 *)Row;
-        for(int X = 0; X < BitmapWidth; ++X)
-        {
-            /*
-             *          byte:    0  1  2  3
-             * Pixel in memory: RR GG BB 00
-             * */
-            *Pixel = 255;
-            ++Pixel;
-
-            *Pixel = 0;
-            ++Pixel;
-
-            *Pixel = 0;
-            ++Pixel;
-
-            *Pixel = 0;
-            ++Pixel;
-        }
-        Row += Pitch;
-    }
+    // TODO(sustainablelab): Clear to black
 }
 
 internal void
-Win32UpdateWindow(HDC DeviceContext, RECT *WindowRect, int X, int Y, int Width, int Height)
+Win32UpdateWindow(HDC DeviceContext, RECT *ClientRect, int X, int Y, int Width, int Height)
 {
-    int WindowWidth = WindowRect->right - WindowRect->left;
-    int WindowHeight = WindowRect->bottom - WindowRect->top;
+    int WindowWidth = ClientRect->right - ClientRect->left;
+    int WindowHeight = ClientRect->bottom - ClientRect->top;
 
     // Copy from buffer to Window
     StretchDIBits(DeviceContext,
@@ -180,7 +185,7 @@ WinMain(
 
     if (RegisterClass(&WindowClass))
     {
-        HWND WindowHandle = CreateWindowExA(
+        HWND Window = CreateWindowExA(
                                 0, // DWORD dwExStyle,
                                 WindowClass.lpszClassName, // LPCSTR lpClassName,
                                 "Handmade Hero", // LPCSTR ,
@@ -194,37 +199,50 @@ WinMain(
                                 Instance, // HINSTANCE hInstance,
                                 0 // LPVOID    lpParam
                                 );
-        if (WindowHandle) //
+        if (Window) //
         {
-            MSG Message;
+            // Initial state of weird gradient: no offset.
+            int XOffset = 0;
+            int YOffset = 0;
             Running = true;
             while(Running)
             {
-                // GetMessage returns:
-                //     . 0 on quit
-                //     . nonzero on other messages
-                //     . -1 on error
-                BOOL MessageResult = GetMessage(&Message, 0, 0, 0);
-                if (MessageResult > 0)
+                // Go through the entire queue of messages.
+                MSG Message;
+                while(PeekMessageA(&Message, 0, 0, 0, PM_REMOVE))
                 {
-                    // Translate keyboard messages
+                    if (Message.message == WM_QUIT)
+                    {
+                        Running = false;
+                    }
                     TranslateMessage(&Message);
                     DispatchMessage(&Message);
                 }
-                else // Window Quit or there is an error
-                {
-                    break;
-                }
+                // Render some image
+                RenderWeirdGradient(XOffset, YOffset);
+
+                // Blit
+                HDC DeviceContext = GetDC(Window);
+                RECT ClientRect;
+                GetClientRect(Window, &ClientRect);
+                int Width = ClientRect.right - ClientRect.left;
+                int Height = ClientRect.bottom - ClientRect.top;
+                Win32UpdateWindow(DeviceContext, &ClientRect, 0, 0, Width, Height);
+                ReleaseDC(Window, DeviceContext);
+
+                // Animate
+                ++XOffset;
+                ++YOffset;
             }
         }
         else // CreateWindow fails if Handle is 0
         {
-            // TODO: logging
+            // TODO(sustainablelab): logging
         }
     }
     else // RegisterClassExA returns ATOM 0 if it fails
     {
-        // TODO: log error
+        // TODO(sustainablelab): log error
         // https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerclassexa
         // https://docs.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-getlasterror
         OutputDebugStringA("CreateWindow fail");
