@@ -15,25 +15,30 @@
 typedef uint8_t uint8;
 typedef uint32_t uint32;
 
+struct win32_offscreen_buffer
+{
+    BITMAPINFO Info;
+    void *Memory;
+    int Width;
+    int Height;
+    int Pitch;
+    int BytesPerPixel;
+};
+
 // TODO(sustainablelab): This is a global for now.
 global_variable bool Running;
-global_variable BITMAPINFO BitmapInfo;
-global_variable void *BitmapMemory;
-global_variable int BitmapWidth;
-global_variable int BitmapHeight;
-global_variable const int BytesPerPixel = 4;
+global_variable win32_offscreen_buffer GlobalBackBuffer;
 
 internal void
-RenderWeirdGradient(int XOffset, int YOffset)
+RenderWeirdGradient(win32_offscreen_buffer Buffer, int XOffset, int YOffset)
 {
-    int Pitch = BitmapWidth*BytesPerPixel;
-    uint8 *Row = (uint8 *)BitmapMemory;
+    uint8 *Row = (uint8 *)Buffer.Memory;
     for(int Y = 0;
-        Y < BitmapHeight;
+        Y < Buffer.Height;
         ++Y)
     {
         uint32 *Pixel = (uint32 *)Row;
-        for(int X = 0; X < BitmapWidth; ++X)
+        for(int X = 0; X < Buffer.Width; ++X)
         {
             /*
              *          byte:    0  1  2  3
@@ -51,48 +56,53 @@ RenderWeirdGradient(int XOffset, int YOffset)
             uint8 Red = XOffset * YOffset;
             *Pixel++ = Blue | (Green << 8) | (Red << 16);
         }
-        Row += Pitch;
+        Row += Buffer.Pitch;
     }
 }
 
 // DIB -- Device Independent Bitmap
 internal void
-Win32ResizeDIBSection(int Width, int Height)
+Win32ResizeDIBSection(win32_offscreen_buffer *Buffer, int Width, int Height)
 {
 
-    if (BitmapMemory)
+    if (Buffer->Memory)
     {
-        VirtualFree(BitmapMemory, 0, MEM_RELEASE);
+        VirtualFree(Buffer->Memory, 0, MEM_RELEASE);
     }
-    BitmapWidth = Width;
-    BitmapHeight = Height;
-    BitmapInfo.bmiHeader.biSize = sizeof(BitmapInfo.bmiHeader);
-    BitmapInfo.bmiHeader.biWidth = BitmapWidth;
+    Buffer->Width = Width;
+    Buffer->Height = Height;
+    Buffer->BytesPerPixel = 4; // xxRRGGBB
+
+    Buffer->Info.bmiHeader.biSize = sizeof(Buffer->Info.bmiHeader);
+    Buffer->Info.bmiHeader.biWidth = Buffer->Width;
     // Use negative height -> StretchDIBits creates a top-down image
-    BitmapInfo.bmiHeader.biHeight = -BitmapHeight;
-    BitmapInfo.bmiHeader.biPlanes = 1;
-    BitmapInfo.bmiHeader.biBitCount = 32;
-    BitmapInfo.bmiHeader.biCompression = BI_RGB;
+    Buffer->Info.bmiHeader.biHeight = -Buffer->Height;
+    Buffer->Info.bmiHeader.biPlanes = 1;
+    Buffer->Info.bmiHeader.biBitCount = 32;
+    Buffer->Info.bmiHeader.biCompression = BI_RGB;
 
     // NOTE(sustainablelab): Thanks Chris Hecker.
-    int BitmapMemorySize = (BitmapWidth*BitmapHeight)*BytesPerPixel;
-    BitmapMemory = VirtualAlloc(0, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+    int BufferMemorySize = ( Buffer->Width * Buffer->Height ) * Buffer->BytesPerPixel;
+    Buffer->Memory = VirtualAlloc(0, BufferMemorySize, MEM_COMMIT, PAGE_READWRITE);
 
+    Buffer->Pitch = Buffer->Width * Buffer->BytesPerPixel;
     // TODO(sustainablelab): Clear to black
 }
 
 internal void
-Win32UpdateWindow(HDC DeviceContext, RECT *ClientRect, int X, int Y, int Width, int Height)
+Win32DisplayBufferInWindow(HDC DeviceContext, RECT ClientRect,
+                        win32_offscreen_buffer Buffer,
+                        int X, int Y, int Width, int Height)
 {
-    int WindowWidth = ClientRect->right - ClientRect->left;
-    int WindowHeight = ClientRect->bottom - ClientRect->top;
+    int WindowWidth = ClientRect.right - ClientRect.left;
+    int WindowHeight = ClientRect.bottom - ClientRect.top;
 
     // Copy from buffer to Window
     StretchDIBits(DeviceContext,
             0, 0, WindowWidth, WindowHeight, // Dest - blit to
-            0, 0, BitmapWidth, BitmapHeight, // Src - blit from
-            BitmapMemory,
-            &BitmapInfo,
+            0, 0, Buffer.Width, Buffer.Height, // Src - blit from
+            Buffer.Memory,
+            &(Buffer.Info),
             DIB_RGB_COLORS, SRCCOPY
             );
 }
@@ -122,7 +132,7 @@ Win32MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
             GetClientRect(Window, &ClientRect);
             int Width = ClientRect.right - ClientRect.left;
             int Height = ClientRect.bottom - ClientRect.top;
-            Win32ResizeDIBSection(Width,Height);
+            Win32ResizeDIBSection(&GlobalBackBuffer, Width, Height);
             OutputDebugStringA("WM_SIZE\n");
         } break;
 
@@ -152,7 +162,9 @@ Win32MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
             int Y = Paint.rcPaint.top;
             int Width = Paint.rcPaint.right - Paint.rcPaint.left;
             int Height = Paint.rcPaint.bottom - Paint.rcPaint.top;
-            Win32UpdateWindow(DeviceContext, &Paint.rcPaint, X, Y, Width, Height);
+            Win32DisplayBufferInWindow(DeviceContext, Paint.rcPaint,
+                                       GlobalBackBuffer,
+                                       X, Y, Width, Height);
             EndPaint(Window, &Paint);
         } break;
         default:
@@ -219,7 +231,7 @@ WinMain(
                     DispatchMessage(&Message);
                 }
                 // Render some image
-                RenderWeirdGradient(XOffset, YOffset);
+                RenderWeirdGradient(GlobalBackBuffer, XOffset, YOffset);
 
                 // Blit
                 HDC DeviceContext = GetDC(Window);
@@ -227,7 +239,9 @@ WinMain(
                 GetClientRect(Window, &ClientRect);
                 int Width = ClientRect.right - ClientRect.left;
                 int Height = ClientRect.bottom - ClientRect.top;
-                Win32UpdateWindow(DeviceContext, &ClientRect, 0, 0, Width, Height);
+                Win32DisplayBufferInWindow(DeviceContext, ClientRect,
+                                           GlobalBackBuffer,
+                                           0, 0, Width, Height);
                 ReleaseDC(Window, DeviceContext);
 
                 // Animate
