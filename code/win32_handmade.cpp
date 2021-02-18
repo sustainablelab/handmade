@@ -29,6 +29,27 @@ struct win32_offscreen_buffer
 global_variable bool Running;
 global_variable win32_offscreen_buffer GlobalBackBuffer;
 
+struct win32_window_dimension
+{
+    int Width;
+    int Height;
+};
+
+win32_window_dimension
+Win32GetWindowDimension(HWND Window)
+{
+    win32_window_dimension Result;
+
+    // ClientRect is the part of the window I can draw into.
+    RECT ClientRect;
+    GetClientRect(Window, &ClientRect);
+
+    Result.Width = ClientRect.right - ClientRect.left;
+    Result.Height = ClientRect.bottom - ClientRect.top;
+
+    return(Result);
+}
+
 internal void
 RenderWeirdGradient(win32_offscreen_buffer Buffer, int XOffset, int YOffset)
 {
@@ -81,21 +102,21 @@ Win32ResizeDIBSection(win32_offscreen_buffer *Buffer, int Width, int Height)
     Buffer->Info.bmiHeader.biBitCount = 32;
     Buffer->Info.bmiHeader.biCompression = BI_RGB;
 
-    // NOTE(sustainablelab): Thanks Chris Hecker.
-    int BufferMemorySize = ( Buffer->Width * Buffer->Height ) * Buffer->BytesPerPixel;
-    Buffer->Memory = VirtualAlloc(0, BufferMemorySize, MEM_COMMIT, PAGE_READWRITE);
+    // NOTE(sustainablelab): Thanks Chris Hecker for eliminating
+    // the need to make a DC (Device Context).
+    int BitmapMemorySize = ( Buffer->Width * Buffer->Height ) * Buffer->BytesPerPixel;
+    Buffer->Memory = VirtualAlloc(0, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
 
     Buffer->Pitch = Buffer->Width * Buffer->BytesPerPixel;
     // TODO(sustainablelab): Clear to black
 }
 
 internal void
-Win32DisplayBufferInWindow(HDC DeviceContext, RECT ClientRect,
+Win32DisplayBufferInWindow(HDC DeviceContext,
+                        int WindowWidth, int WindowHeight,
                         win32_offscreen_buffer Buffer,
                         int X, int Y, int Width, int Height)
 {
-    int WindowWidth = ClientRect.right - ClientRect.left;
-    int WindowHeight = ClientRect.bottom - ClientRect.top;
 
     // Copy from buffer to Window
     StretchDIBits(DeviceContext,
@@ -127,13 +148,8 @@ Win32MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
     {
         case WM_SIZE: // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-size
         {
-            // ClientRect is the part of the window I can draw into.
-            RECT ClientRect;
-            GetClientRect(Window, &ClientRect);
-            int Width = ClientRect.right - ClientRect.left;
-            int Height = ClientRect.bottom - ClientRect.top;
-            Win32ResizeDIBSection(&GlobalBackBuffer, Width, Height);
-            OutputDebugStringA("WM_SIZE\n");
+            win32_window_dimension Dimension = Win32GetWindowDimension(Window);
+            Win32ResizeDIBSection(&GlobalBackBuffer, Dimension.Width, Dimension.Height);
         } break;
 
         case WM_CLOSE:
@@ -162,7 +178,7 @@ Win32MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
             int Y = Paint.rcPaint.top;
             int Width = Paint.rcPaint.right - Paint.rcPaint.left;
             int Height = Paint.rcPaint.bottom - Paint.rcPaint.top;
-            Win32DisplayBufferInWindow(DeviceContext, Paint.rcPaint,
+            Win32DisplayBufferInWindow(DeviceContext, Width, Height, // Paint.rcPaint,
                                        GlobalBackBuffer,
                                        X, Y, Width, Height);
             EndPaint(Window, &Paint);
@@ -189,6 +205,7 @@ WinMain(
     // Create a WindowClass to register for creating a window.
     WNDCLASSA WindowClass = {}; // zero-initialize (all don't-care vars are 0)
 
+
     WindowClass.style = CS_HREDRAW | CS_VREDRAW;
     // Pointer to func that handles windows notifications
     WindowClass.lpfnWndProc = Win32MainWindowCallback;
@@ -213,6 +230,9 @@ WinMain(
                                 );
         if (Window) //
         {
+            /* win32_window_dimension Dimension = Win32GetWindowDimension(Window); */
+            /* Win32ResizeDIBSection(&GlobalBackBuffer, Dimension.Width, Dimension.Height); */
+
             // Initial state of weird gradient: no offset.
             int XOffset = 0;
             int YOffset = 0;
@@ -235,13 +255,12 @@ WinMain(
 
                 // Blit
                 HDC DeviceContext = GetDC(Window);
-                RECT ClientRect;
-                GetClientRect(Window, &ClientRect);
-                int Width = ClientRect.right - ClientRect.left;
-                int Height = ClientRect.bottom - ClientRect.top;
-                Win32DisplayBufferInWindow(DeviceContext, ClientRect,
+
+                win32_window_dimension Dimension = Win32GetWindowDimension(Window);
+                Win32DisplayBufferInWindow(DeviceContext,
+                                           Dimension.Width, Dimension.Height,
                                            GlobalBackBuffer,
-                                           0, 0, Width, Height);
+                                           0, 0, Dimension.Width, Dimension.Height);
                 ReleaseDC(Window, DeviceContext);
 
                 // Animate
