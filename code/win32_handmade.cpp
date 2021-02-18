@@ -148,8 +148,6 @@ Win32MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
     {
         case WM_SIZE: // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-size
         {
-            win32_window_dimension Dimension = Win32GetWindowDimension(Window);
-            Win32ResizeDIBSection(&GlobalBackBuffer, Dimension.Width, Dimension.Height);
         } break;
 
         case WM_CLOSE:
@@ -230,8 +228,9 @@ WinMain(
                                 );
         if (Window) //
         {
-            /* win32_window_dimension Dimension = Win32GetWindowDimension(Window); */
+            win32_window_dimension Dimension = Win32GetWindowDimension(Window);
             /* Win32ResizeDIBSection(&GlobalBackBuffer, Dimension.Width, Dimension.Height); */
+            Win32ResizeDIBSection(&GlobalBackBuffer, 1280, 720);
 
             // Initial state of weird gradient: no offset.
             int XOffset = 0;
