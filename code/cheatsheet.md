@@ -1,7 +1,26 @@
-> vcvars
-> devenv (Tools -> Options -> Startup -> Most Recent Solution) (> devenv .\win32_handmade.sln)
-;m<Space> -- build
-;Alt<Left-Arrow/Right-Arrow> -- jump between errors
-;t<Space> -- close quickfix window
-VisualStudio: F5, Shift+F5
-;K -- DuckDuckGo for WinAPI stuff
+- `PS> vcvars`
+- `PS> devenv` (will open most recent solution)
+    - *Tools* -> *Options* -> *Startup* -> *Most Recent Solution*
+    - `PS> devenv .\win32_handmade.sln`
+    - `PS> devenv .\ex_ptr_alias.sln`
+- VisualStudio:
+    - **F5** (run)
+    - **Shift+F5** (stop)
+    - **F11** (step)
+    - **F9** (set breakpoint)
+- `;m<Space>` -- build
+- `;Alt<Left-Arrow/Right-Arrow>` -- jump between errors
+- `;t<Space>` -- close quickfix window
+- `;K` -- DuckDuckGo for WinAPI stuff
+- `;cu` -- create tags (needed for omni complete) and cscope database
+    - `Win32<C-x><C-o>` -- see all `Win32` functions
+    - `;wz` -- close preview window
+- `:make lib-tags`
+    - updates tags file `lib-tags` based on source dependencies
+      of `win32_handmade.cpp`
+    - `WND<C-x><C-o>` -- see all system header defined types
+      starting with prefix `WND`
+- `PS> cl.exe` -- Microsoft C/C++ Optimizing Compiler Version 19.28 for x64
+    - https://docs.microsoft.com/en-us/cpp/build/reference/compiler-options-listed-by-category?view=msvc-160
+- `PS> ml64.exe` -- Microsoft Macro Assembler (x64) Version 14.28
+    - https://docs.microsoft.com/en-us/cpp/assembler/masm/masm-for-x64-ml64-exe?view=msvc-160

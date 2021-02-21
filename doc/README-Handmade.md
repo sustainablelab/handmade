@@ -46,14 +46,65 @@ int __clrcall WinMain(
 Fix:
 
 - change the indentation to four spaces
-- include `windows.h`
-    - on my computer, `windows.h` is here:
-    - `C:\Program Files (x86)\Windows Kits\10\include\10.0.18362.0\um\Windows.h`
-- add an empty body that returns 0 (OK)
-- erase `__clrcall`:
 
-I found `windows.h` by accident.
-I called a win32 function with the wrong name and got this error
+### paths to includes for Vim `gf`
+
+
+The source code includes win32 api headers.
+
+*Example:*
+
+```c
+#include <windows.h>
+```
+
+These win32api headers are here:
+
+```
+C:\Program Files (x86)\Windows Kits\10\include\10.0.18362.0\um\Windows.h
+```
+
+The source code includes MSVC headers.
+
+*Example:*
+
+```c
+#include <stdint.h>
+```
+
+These MSVC headers are here:
+
+```
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.28.29333\include
+```
+
+#### Use VisualStudio to find system and compiler headers
+
+- open the source code that includes the header
+- right click on the filename in the include statement
+    - VisualStudio opens the file in a tab
+- right-click the tab name and choose open in folder
+- Ctrl+L Ctrl+C to copy the path
+
+#### setup Vim to jump to files
+
+- with cursor on filename, Vim jumps to header files with `gf`
+- `gf` requires adding the header path to Vim's `path`
+
+```vim
+" HandmadeHero: path to win32api headers
+set path=.
+set path+=**
+let path_win32api='/cygdrive/c/Program\ Files\ (x86)/Windows\ Kits/10/Include/10.0.18362.0/um'
+let &path=&path . ',' . path_win32api
+let path_msvc='/cygdrive/c/Program\ Files\ (x86)/Microsoft\ Visual\ Studio/2019/Community/VC/Tools/MSVC/14.28.29333/include'
+let &path=&path . ',' . path_msvc
+```
+
+#### tangent: accidentally found `windows.h`
+
+I originally found `windows.h` by accident. I called a win32
+function with the wrong name and got this error
 message from the compiler:
 
 ```
@@ -82,6 +133,160 @@ int WinMain(
     return 0;
 }
 ```
+
+### set up tags files for system and compiler dependencies
+
+`;K` will open a browser tab on DuckDuckGo and put the word under
+the cursor in the clipboard for pasting in and searching
+docs.microsoft.com
+
+*But!*
+
+*Instead of constantly going to docs.microsoft.com and searching
+for stuff...*
+
+I added a `make` recipe to generate a tags file of source
+dependencies.
+
+- Vim sets the pats to tags files with the `tags` variable
+
+*Example: look in the pwd for files names `tags` or `lib-tags`*
+
+```vim
+set tags=tags,lib-tags
+```
+
+- `tags` is the tags file I generate for my source code
+    - this is generated/updated with `;cu`
+    - `;cu` also generates a cscope database for the more
+      powerful cscope probing of the source file
+- `lib-tags` is the file I generate for system and compiler
+  header files
+    - C-file omni-complete uses tags, not cscope, so I make a
+      tags file for dependencies
+    - this is generated/updated with `make lib-tags`
+- simplest thing to do is keep these tags files separate because
+  I want to run them separately
+    - `;cu` runs real quick and I want to run it all the time on
+      my source
+    - `make lib-tags` has to do a bunch of stuff that takes a
+      little longer:
+        - compile `win32_handmade.cpp` with flag `/sourceDependencies lib-tags.json`
+            - compile this without linking `/c` because linking is just a
+              waste of time since /sourceDependencies gets what it
+              needs from the compiler step alone
+        - `rm` the `.obj` file that gets generated because I compiled
+        - `/sourceDependencies` outputs a JSON file, this is just how
+          it is
+        - so I wrote a quick JSON parser to grab the info `ctags`
+          needs
+        - run the JSON parser and create a list of files
+        - call `ctags` with `-L` on the list of files
+
+Here is the JSON parser:
+
+```python
+# parse-lib-tags-json.py
+import json
+with open("lib-tags.json") as fin:
+    parsed = json.load(fin)
+    with open("lib-tags.txt", mode="w") as fout:
+        for include in parsed["Data"]["Includes"]:
+            fout.write(include)
+            fout.write("\n")
+```
+
+*Now, whether it's a symbol I define or a symbol defined by the
+system header files or the compiler header files, I can tag-jump
+and omnicomplete.*
+
+- with cursor on a function name, `<C-]>` jumps to the definition
+- typing a function name, Vim omnicomplete with `<C-x><C-o>`
+    - this opens a menu of completion options
+    - this also opens a preview window with the function name and
+      some documentation
+- omnicomplete in C/C++ uses the tags file, so `<C-x><C-o>`
+  requires generating a `tags` file
+
+The behavior of `;cu` is defined here:
+
+```
+/home/mike/.vim/pack/bundle/dev/autoload/ctags.vim
+```
+
+`;cu`:
+
+```vim
+call system("ctags --c-kinds=+l --exclude=Makefile -R .")
+```
+
+- `+l` includes local variables
+- `-R .` recurse into the current directory
+
+- `-L file` read from file a list of file names for which tags
+  should be generated
+
+To automate the task of making the `lib-tags`, I made this recipe
+for a target called `lib-tags`:
+
+```make
+.PHONY: lib-tags
+lib-tags: win32_handmade.cpp
+	cl.exe /c /sourceDependencies lib-tags.json $<
+	rm win32_handmade.obj
+	python.exe parse-lib-tags-json.py
+	rm lib-tags.json
+	ctags -f lib-tags --c-kinds=+p -L lib-tags.txt
+	rm lib-tags.txt
+```
+
+`--c-kinds=+p` includes function prototypes. This is necessary
+for CTAGS to pick up the finds of functions Casey is always
+looking up. Typical C organization: headers only have signatures,
+a.k.a., prototypes, not the function definition, but ctags does
+not include these by default. So for `lib-tags` the option to
+include prototypes `--c-kinds=+p` is super important, otherwise
+the `lib-tags` just has macro definitions and typedefs.
+
+Similarly, if I encounter headers that declare `extern`
+variables, I'd want to include those as well: `--c-kinds=+px`.
+Or if there's too much "noise" from all the macros, I could
+eliminate those from the `lib-tags` with `--c-kinds=+px-d`.
+
+I made the target `PHONY` so that it always runs regardless of
+whether file `lib-tags` exists. This made it easier while
+creating each of the little tools I used in the recipe. At this
+point, there's really no reason for it to be `PHONY`, but I like
+having it there as a reminder of what kind of recipe this target
+uses.
+
+If `make lib-tags` ever starts taking too long to generate, I can
+remove the `PHONY` and then `lib-tags` will only run its recipe
+if `win32_handmade.cpp` changed.
+
+### useful ctags tricks to inspect code
+
+*These examples use `-x` which prints human-readable info to
+stdout instead of making a tags file.*
+
+List all functions used in `file`:
+
+```bash
+ctags  -x  --c-kinds=f  file
+```
+
+List all global variables used in file:
+
+```bash
+ctags  -x  --c-kinds=v file
+```
+
+
+## back to the code
+
+- add an empty body that returns 0 (OK)
+- erase `__clrcall`:
+
 
 Casey makes a build script:
 
@@ -449,3 +654,76 @@ but `static` is great for debugging
 
 - init to 0
 - keep symbol private to translation unit
+
+## zero-initialize
+
+All don't-care vars are 0.
+
+*Example:*
+
+```c
+    WNDCLASSA WindowClass = {}; // zero-initialize
+    // Now set the vars I care about.
+    WindowClass.style = CS_HREDRAW | CS_VREDRAW;
+    ...
+```
+
+## Dealing with XInput.lib
+
+The [Platform
+Requirements](https://docs.microsoft.com/en-us/windows/win32/api/xinput/nf-xinput-xinputgetstate#platform-requirements)
+to call XInput API functions are sketchy. If we link directly to
+`Xinput.lib`:
+
+```make
+IMPORTLIBS = user32.lib gdi32.lib xinput.lib
+cl.exe $(CFLAGS) $(IMPORTLIBS) $< /Fe"$@"
+```
+
+And the player doesn't have the Xinput DLLs installed, then the
+game won't load. But the game is playable with a keyboard, so
+there's no reason for this.
+
+Casey takes *just* the two functions he needs from `xinput.h` and
+does not link to `xinput.lib`! Instead he stubs the functions so
+that they do nothing by default and attempts to load the
+functions from the `.dll`. In picking which `.dll` to load from,
+he does *not* use the `.dll` mentioned in the header or in the
+docs because, as he demonstrates, the computer he's on doesn't
+have it and it's likely players won't have it either. So he
+searches for an earlier version, finds that, assumes that's
+universal enough. Here's the command line search:
+
+```cmd
+c:\Windows>dir /s xinput1_3.dll
+ Volume in drive C has no label.
+ Volume Serial Number is 5E8F-2C34
+
+ Directory of c:\Windows\System32
+
+04/04/2007  09:54 PM           107,368 xinput1_3.dll
+               1 File(s)        107,368 bytes
+
+ Directory of c:\Windows\SysWOW64
+
+04/04/2007  09:53 PM            81,768 xinput1_3.dll
+               1 File(s)         81,768 bytes
+
+     Total Files Listed:
+               2 File(s)        189,136 bytes
+               0 Dir(s)  92,644,913,152 bytes free
+```
+
+See Microsoft examples here:
+
+https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress
+
+See how Microsoft locates the `.dll`:
+
+https://docs.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order
+
+Don't need to distribute the .dll but you can. It's called a
+"redistributable." But then it has to get installed on the user's
+machine, which is not a great idea -- installed lots of crap.
+Better to use old .dll that is more likely already there (or is
+backwards compatible).
