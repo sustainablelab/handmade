@@ -764,3 +764,158 @@ eighth-box, 12 bits a sixteenth-box. Finally, 13 bits moves the
 background a maximum of a thirty-second-box at a time, which
 feels about right.
 
+## Keyboard input
+
+Windows has key down/up messages and system/non-system key
+messages. Combining the possibilities, there are four messages:
+
+```c
+WM_SYSKEYDOWN: // F10-key pressed or Alt+key pressed
+WM_SYSKEYUP:   // F10-key released or Alt+key released
+WM_KEYDOWN:    // other key pressed
+WM_KEYUP:      // other key released
+```
+
+If any of these cases are left out of the `switch` block, the
+`DefWindowProcA` will handle the case. This removes the message
+from the queue and I am unable to process it myself.
+
+I claim the message for myself by providing a case.
+
+Rather than code for each case, Casey just uses empty cases to
+catch them all, then puts all of his code in the keyup case. This
+does not mean Casey's response is only to keyup messages. The
+keyup case is catching *all* of the key-related messages.
+
+This struck me as odd and I tried doing it the other way: handle
+key-down things in the key-down case and key-up things in the
+key-up case. But having `Alt` pressed down prevented my from
+registering when `F4` was released. I'd like to revisit this
+later, but for now I'm keeping it simple: do what Casey does and
+set up the cases as a fall-through so that all key-handling
+happens in one case statement.
+
+```c
+        // Catch all keyboard messages. Do not let DefWindowProcA process them.
+        case WM_SYSKEYDOWN: // fall through
+        case WM_SYSKEYUP:   // fall through
+        case WM_KEYDOWN:    // fall through
+        case WM_KEYUP:      // All keyboard messages are handled here.
+        {
+            // Get virtual key code
+            uint32 VK_Code = WParam;
+            // Get key press information
+            bool WasDown = ((LParam & (1<<30)) != 0);
+            bool IsDown = ((LParam & (1<<31)) == 0);
+
+            // --- Quit with Alt+F4: I handle quit, not Windows ---
+            bool32 AltKeyWasDown = ((LParam & (1<<29)) != 0);
+            if ((VK_Code == VK_F4) && AltKeyWasDown)
+            {
+                GlobalRunning = false;
+            }
+
+            // ---EXPLANATION---
+
+            // LParam bit 29 is the "Context Code":
+            //  - 1 if ALT key was down when message was generated
+            //  - 0 otherwise
+            // Bit 29 is ALWAYS 0 in WM_KEYDOWN messages (see docs).
+            // Bit 29 is ALWAYS 0 in WM_KEYUP messages (see docs).
+            // Ignore those docs. I tested this in the debugger!
+            //
+            // I see "Alt DOWN". Then I press "F4".
+            // IsDown is True and WasDown is False.
+            // That means pressing "F4" is a "WM_KEYDOWN" message!
+            //
+            // AltKeyWasDown is True.
+            // This sets GlobalRunning to False.
+            // So set a breakpoint on that line to do the
+            // following test.
+            //
+            // The game loop has to iterate again before exiting,
+            // so the case statement will finish executing my
+            // key-press debug print code.
+            //
+            // The debug print out goes like this:
+            // Hold down Alt:
+            // "Alt DOWN" <------------- debug output
+            // Press F4 and the code breaks. Let go of Alt and F4.
+            // Step through the code with F11:
+            // "F4" <------------------- debug output
+            // Keep stepping
+            // "F4 DOWN" <-------------- debug output
+            // (Keep stepping and it eventually quits.)
+```
+
+The only thing I'm doing differently is I went ahead and put a
+switch block to read the virtual key codes (`VK_Code`) instead of
+the if-else placeholders. I did this *now* because I wanted to
+play around with key presses and see messages in the debugger and
+I quickly realized I could write that code in *one* place if I
+used the switch case to grab the `VK_Code` instead of
+copying-and-pasting the debug print messages it into every
+if-else statement.
+
+Here's the flavor of Casey's if-else placeholder version. The
+nice thing about this is it's simple to read and to quickly try
+out something based on a particular key.
+
+```c
+        // Casey's temporary KEYUP code with if statements
+        case WM_KEYUP: // key released
+        {
+            uint32 VK_Code = WParam;
+            bool WasDown = ((LParam & (1<<30)) != 0);
+            bool IsDown = ((LParam & (1<<31)) == 0);
+            OutputDebugStringA("Key RELEASED: ");
+            if (VK_Code == VK_UP)
+            {
+                OutputDebugStringA("Up-Arrow\n");
+            }
+            if (VK_Code == VK_DOWN)
+            {
+                OutputDebugStringA("Down-Arrow\n");
+            }
+            if (VK_Code == VK_LEFT)
+            {
+                OutputDebugStringA("Left-Arrow\n");
+            }
+            if (VK_Code == VK_RIGHT)
+            {
+                OutputDebugStringA("Right-Arrow\n");
+            }
+            if (VK_Code == 'W')
+            {
+                OutputDebugStringA("W\n");
+            }
+            if (VK_Code == 'A')
+            {
+                OutputDebugStringA("A\n");
+            }
+            if (VK_Code == 'S')
+            {
+                OutputDebugStringA("S\n");
+            }
+            if (VK_Code == 'D')
+            {
+                OutputDebugStringA("D\n");
+            }
+            if (VK_Code == 'Q')
+            {
+                OutputDebugStringA("Q\n");
+            }
+            if (VK_Code == 'E')
+            {
+                OutputDebugStringA("E\n");
+            }
+            if (VK_Code == VK_SPACE)
+            {
+                OutputDebugStringA("Space\n");
+            }
+            if (VK_Code == VK_ESCAPE)
+            {
+                OutputDebugStringA("Escape\n");
+            }
+        } break;
+```

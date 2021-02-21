@@ -31,7 +31,7 @@
 typedef X_INPUT_GET_STATE(x_input_get_state);
 X_INPUT_GET_STATE(XInputGetStateStub)
 {
-    return(0);
+    return(ERROR_DEVICE_NOT_CONNECTED);
 }
 global_variable x_input_get_state *XInputGetState_ = XInputGetStateStub;
 #define XInputGetState XInputGetState_
@@ -41,7 +41,7 @@ global_variable x_input_get_state *XInputGetState_ = XInputGetStateStub;
 typedef X_INPUT_SET_STATE(x_input_set_state);
 X_INPUT_SET_STATE(XInputSetStateStub)
 {
-    return(0);
+    return(ERROR_DEVICE_NOT_CONNECTED);
 }
 global_variable x_input_set_state *XInputSetState_ = XInputSetStateStub;
 #define XInputSetState XInputSetState_
@@ -49,7 +49,12 @@ global_variable x_input_set_state *XInputSetState_ = XInputSetStateStub;
 internal void
 Win32LoadXInput(void) // Try to get XInput, use stubs if no XInput.
 {
-    HMODULE XInputLibrary = LoadLibraryA("xinput1_3.dll");
+    // TODO(sustainablelab): Test this on Windows 8
+    HMODULE XInputLibrary = LoadLibraryA("xinput1_4.dll");
+    if (!XInputLibrary) // Try 1.3 if 1.4 is not available.
+    {
+        HMODULE XInputLibrary = LoadLibraryA("xinput1_3.dll");
+    }
     if (XInputLibrary)
     {
         XInputGetState = (x_input_get_state *)GetProcAddress(XInputLibrary, "XInputGetState");
@@ -58,8 +63,9 @@ Win32LoadXInput(void) // Try to get XInput, use stubs if no XInput.
 }
 
 typedef uint8_t uint8;
-typedef uint32_t uint32;
 typedef int16_t int16;
+typedef uint32_t uint32;
+typedef int32_t bool32;
 
 struct win32_offscreen_buffer // bitmap memory
 {
@@ -231,13 +237,25 @@ Win32MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
             OutputDebugStringA("WM_ACTIVATEAPP\n");
         } break;
 
-        case WM_KEYDOWN: // key pressed
+        // Catch all keyboard messages. Do not let DefWindowProcA process them.
+        case WM_SYSKEYDOWN: // fall through
+        case WM_SYSKEYUP:   // fall through
+        case WM_KEYDOWN:    // fall through
+        case WM_KEYUP:      // All keyboard messages are handled here.
         {
             // Get virtual key code
             uint32 VK_Code = WParam;
             // Get key press information
             bool WasDown = ((LParam & (1<<30)) != 0);
             bool IsDown = ((LParam & (1<<31)) == 0);
+
+            // --- Quit with Alt+F4: I handle quit, not Windows ---
+            bool32 AltKeyWasDown = (LParam & (1<<29));
+            if ((VK_Code == VK_F4) && AltKeyWasDown)
+            {
+                GlobalRunning = false;
+            }
+
             // Convert virtual key code to a string
             char *key;
             switch(VK_Code)
@@ -289,163 +307,38 @@ Win32MainWindowCallback( // "Window Procedure" that lpfnWndProc points to
                 case VK_ESCAPE:
                 {
                     key = "Escape";
-                    // quit
-                    GlobalRunning = false;
+                } break;
+                case VK_F4:
+                {
+                    key = "F4";
+                } break;
+                case VK_MENU: // Alt
+                {
+                    key = "Alt";
                 } break;
                 default:
                 {
                     key = "Unused";
                 }
             }
-            // Debug print key string and key press information
+
+            // --- Debug key presses ---
+            //
             OutputDebugStringA("Key ");
             OutputDebugStringA(key);
-            if (IsDown == WasDown)
+            if (IsDown == WasDown) // held down
             {
                 OutputDebugStringA(" HELD down");
             }
-            else if (IsDown)
+            else if (IsDown) // just pressed down now
             {
                 OutputDebugStringA(" DOWN");
             }
+            else
+            {
+                OutputDebugStringA(" UP");
+            }
             OutputDebugStringA("\n");
-        } break;
-        case WM_KEYUP: // key released
-        {
-            // Get virtual key code
-            uint32 VK_Code = WParam;
-            // Get key press information
-            bool WasDown = ((LParam & (1<<30)) != 0);
-            // Convert virtual key code to a string
-            char *key;
-            switch(VK_Code)
-            {
-                case VK_UP:
-                {
-                    key = "Up-Arrow";
-                } break;
-                case VK_DOWN:
-                {
-                    key = "Down-Arrow";
-                } break;
-                case VK_LEFT:
-                {
-                    key = "Left-Arrow";
-                } break;
-                case VK_RIGHT:
-                {
-                    key = "Right-Arrow";
-                } break;
-                case 'W':
-                {
-                    key = "W";
-                } break;
-                case 'A':
-                {
-                    key = "A";
-                } break;
-                case 'S':
-                {
-                    key = "S";
-                } break;
-                case 'D':
-                {
-                    key = "D";
-                } break;
-                case 'Q':
-                {
-                    key = "Q";
-                } break;
-                case 'E':
-                {
-                    key = "E";
-                } break;
-                case VK_SPACE:
-                {
-                    key = "Space";
-                } break;
-                case VK_ESCAPE:
-                {
-                    key = "Escape";
-                } break;
-                default:
-                {
-                    key = "Unused";
-                }
-            }
-            // Debug print key string and key press information
-            OutputDebugStringA("Key ");
-            OutputDebugStringA(key);
-            OutputDebugStringA(" UP");
-            OutputDebugStringA("\n");
-        } break;
-
-#if 0 // Casey's KEYUP code
-        case WM_KEYUP: // key released
-        {
-            uint32 VK_Code = WParam;
-            bool WasDown = ((LParam & (1<<30)) != 0);
-            bool IsDown = ((LParam & (1<<31)) == 0);
-            OutputDebugStringA("Key RELEASED: ");
-            if (VK_Code == VK_UP)
-            {
-                OutputDebugStringA("Up-Arrow\n");
-            }
-            if (VK_Code == VK_DOWN)
-            {
-                OutputDebugStringA("Down-Arrow\n");
-            }
-            if (VK_Code == VK_LEFT)
-            {
-                OutputDebugStringA("Left-Arrow\n");
-            }
-            if (VK_Code == VK_RIGHT)
-            {
-                OutputDebugStringA("Right-Arrow\n");
-            }
-            if (VK_Code == 'W')
-            {
-                OutputDebugStringA("W\n");
-            }
-            if (VK_Code == 'A')
-            {
-                OutputDebugStringA("A\n");
-            }
-            if (VK_Code == 'S')
-            {
-                OutputDebugStringA("S\n");
-            }
-            if (VK_Code == 'D')
-            {
-                OutputDebugStringA("D\n");
-            }
-            if (VK_Code == 'Q')
-            {
-                OutputDebugStringA("Q\n");
-            }
-            if (VK_Code == 'E')
-            {
-                OutputDebugStringA("E\n");
-            }
-            if (VK_Code == VK_SPACE)
-            {
-                OutputDebugStringA("Space\n");
-            }
-            if (VK_Code == VK_ESCAPE)
-            {
-                OutputDebugStringA("Escape\n");
-            }
-        } break;
-#endif
-
-        case WM_SYSKEYDOWN: // F-key pressed or Alt+key pressed
-        {
-            // Do not block OS from handling system key strokes.
-            Result = DefWindowProcA(Window, Message, WParam, LParam);
-        } break;
-        case WM_SYSKEYUP: // F-key released or Alt+key released
-        {
-            
         } break;
 
         case WM_PAINT:
