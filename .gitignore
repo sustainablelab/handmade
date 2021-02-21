@@ -6,3 +6,6 @@
 *.vs
 *.ilk
 *.pdb
+cscope.out
+tags
+lib-tags
