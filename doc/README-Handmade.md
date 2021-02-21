@@ -727,3 +727,40 @@ Don't need to distribute the .dll but you can. It's called a
 machine, which is not a great idea -- installed lots of crap.
 Better to use old .dll that is more likely already there (or is
 backwards compatible).
+
+## WeirdGradient movement
+
+```c
+// Interact with weird gradient
+XOffset += StickX >> 13;
+YOffset -= StickY >> 13;
+```
+
+Why bit-shift right 13 times? StickX is an `int`. This is a signed
+16-bit value. Push full right and StickX == 32767, full left
+StickX == -32767. XOffset is also an `int`. So no obvious reason
+to bitshift yet.
+
+But XOffset is cast as a byte when it is used. This is how the
+pixel color channels are assigned. Casting the int as a byte was
+equivalent to doing a mod 255. Since XOffset was simply increment
+before, this crude mod 255 was fine.
+
+But now XOffset is not simply incrementing. It's accumulating the
+value of StickX. Therefore, doing the mod 255 after adding
+XOffset causes the value to alias. The mod 255 is looking at the
+8 least significant bits of this add result. Any seeming correct
+behavior is an aliasing artifact. The actual behavior should
+appear somewhat random.
+
+Bit-shifting by 8 would at least put the results in the right
+range where the 8 bits are used are the 8 most significant bits.
+But then pushing all the way right or left moves the gradient an
+entire box worth, causing way too much of an XOffset. We want
+left/right to feel like moving the gradient, so the "strength" of
+this needs to be much lower. Bit-shifting 9 bits moves half-box
+at a time, still too much. 10 bits a quarter-box, 11 bits an
+eighth-box, 12 bits a sixteenth-box. Finally, 13 bits moves the
+background a maximum of a thirty-second-box at a time, which
+feels about right.
+
