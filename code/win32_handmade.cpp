@@ -20,6 +20,26 @@ typedef int32_t bool32;
 #define local_persist static
 #define global_variable static
 
+struct win32_offscreen_buffer // bitmap memory
+{
+    // NOTE(sustainablelab):
+    //     --- Pixels are always 32 bits wide, little endian ---
+    //                      0x xx RR GG BB
+    //     --- Memory order as viewed in VisualStudio ---
+    //         BB GG RR XX  BB GG RR XX  BB GG RR XX  BB GG RR XX
+    BITMAPINFO Info;
+    void *Memory;
+    int Width;
+    int Height;
+    int Pitch;
+};
+
+// TODO(sustainablelab): These are global for now.
+global_variable win32_offscreen_buffer GlobalBackBuffer; // bitmap buffer
+global_variable IDirectSoundBuffer *GlobalSecondaryBuffer; // audio buffer
+global_variable bool GlobalRunning;
+
+
 // --- Stubs for XInput (controllers) ---
 //
 /* Linking against xinput.lib *requires* player to have the DLLs for XBox360
@@ -138,9 +158,8 @@ Win32InitDSound(HWND Window, int32 SamplesPerSecond, int32 BufferSize) // Setup 
             BufferDescription.dwBufferBytes = BufferSize;
             BufferDescription.lpwfxFormat = &WaveFormat;
             BufferDescription.guid3DAlgorithm = DS3DALG_DEFAULT;
-            IDirectSoundBuffer *SecondaryBuffer;
             if (SUCCEEDED(DirectSound->CreateSoundBuffer(
-                        &BufferDescription, &SecondaryBuffer, 0)))
+                        &BufferDescription, &GlobalSecondaryBuffer, 0)))
             {
             }
             else
@@ -185,24 +204,6 @@ Win32LoadXInput(void) // Try to get XInput, use stubs if no XInput.
         // TODO(sustainablelab): Diagnostic (xinput dll not available)
     }
 }
-
-struct win32_offscreen_buffer // bitmap memory
-{
-    // NOTE(sustainablelab):
-    //     --- Pixels are always 32 bits wide, little endian ---
-    //                      0x xx RR GG BB
-    //     --- Memory order as viewed in VisualStudio ---
-    //         BB GG RR XX  BB GG RR XX  BB GG RR XX  BB GG RR XX
-    BITMAPINFO Info;
-    void *Memory;
-    int Width;
-    int Height;
-    int Pitch;
-};
-
-global_variable win32_offscreen_buffer GlobalBackBuffer; // bitmap buffer
-// TODO(sustainablelab): This is a global for now.
-global_variable bool GlobalRunning;
 
 struct win32_window_dimension // Width, Height
 {

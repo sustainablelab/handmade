@@ -974,6 +974,25 @@ The unnecessarily complicated setup goes like this:
 
 - create an "interface" with DirectSoundCreate()
 - then call "interface" methods
+    - this is why we only have one GetProcAddress() for the
+      DirectSound .dll
+    - we need the procedure for DirectSoundCreate()
+    - after that, we have no choice, we have to use the Windows
+      COM (component object model) API
+    - the idea is that Windows wrote the DirectSound code in C++
+    - COM lets you access this code whether in C or C++
+    - you create an interface
+    - the interface has virtual functions
+    - virtual functions are a second level of indirection -- the
+      compiler outputs assembly that looks at the IDirectSound
+      struct to find the address of its vtable, looks up the
+      address in the that vtable of the "method" we want to call,
+      then jumps to the actual method code (the function) to
+      execute it
+    - this is much less direct than simply calling a function,
+      which is what we do with the GetProcAddress() trick, but
+      like I said, Windows forces us to use the COM API to work
+      with DirectSound
 - the first method you must call is to SetCooperativeLevel()
 - then create primary buffer
     - anachronistic
@@ -984,12 +1003,21 @@ The unnecessarily complicated setup goes like this:
         - audio with a different sampe rate would get resampled
         - nowadays not sure how this works, but not like this
     - never writing audio to the primary buffer
-    - it's just our way of telling Windows to set up the
-      soundcard with a sample rate that matches the audio in the
-      game
+    - we have no direct write privileges to the soundcard, just
+      like the graphics card
+    - primary buffer is just how Windows wants us to tell Windows
+      to set up the soundcard with a sample rate that matches the
+      audio in the game
 - then create secondary buffer <--- actually write sound here
-- these both take structs for buffer descriptions and wave
-  (audio) formats, so it's a lot of setting up structs to make
-  calls and the parameters for the struct values are poorly
-  documented
+    - the OS will handle outputting this to the soundcard
+    - it will mix us with other audio
+    - we have no control beyond putting the audio here and
+      setting flags when creating this buffer
+
+The primary and secondary buffers both take structs for buffer
+descriptions and wave (audio) formats, so it's a lot of setting
+up structs to make calls and the parameters for the struct values
+are poorly documented. The calls are all indirect because of COM,
+so the assembly is may instructions to load addresses instead of
+a single `call` instruction to the function's address.
 
