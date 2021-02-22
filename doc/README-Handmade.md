@@ -919,3 +919,65 @@ out something based on a particular key.
             }
         } break;
 ```
+
+# Sound
+
+## DirectSound .dll
+Find `dsound.dll`:
+
+```cmd
+c:\Windows>dir /s dsound.dll
+ Volume in drive C has no label.
+ Volume Serial Number is 5E8F-2C34
+
+ Directory of c:\Windows\System32
+
+12/07/2019  04:08 AM           615,424 dsound.dll
+               1 File(s)        615,424 bytes
+
+ Directory of c:\Windows\SysWOW64
+
+12/07/2019  04:09 AM           493,056 dsound.dll
+               1 File(s)        493,056 bytes
+
+ Directory of c:\Windows\WinSxS\amd64_microsoft-windows-audio-dsound_31bf3856ad364e35_10.0.19041.1_none_0e8ccbdbe140657b
+
+12/07/2019  04:08 AM           615,424 dsound.dll
+               1 File(s)        615,424 bytes
+
+ Directory of c:\Windows\WinSxS\wow64_microsoft-windows-audio-dsound_31bf3856ad364e35_10.0.19041.1_none_18e1762e15a12776
+
+12/07/2019  04:09 AM           493,056 dsound.dll
+               1 File(s)        493,056 bytes
+
+     Total Files Listed:
+               4 File(s)      2,216,960 bytes
+               0 Dir(s)  92,395,655,168 bytes free
+```
+
+## Concept
+
+Sound is stored in a buffer in memory. Sound access works as a
+looping write-head/read-head over that memory. Each sample of
+stereo audio is stored 16bits of LEFT 16 bits of RIGHT. So there
+are 4 bytes per sample of audio. The buffer size is this 4-byte
+sample size times the sampling rate times the seconds of audio
+length of this buffer.
+
+## Windows DirectSound uses COM trash
+
+DirectSound uses the Component Object Model (COM) disaster.
+This API sucks. The docs suck.
+
+Instead of a simple function call API, its all object based.
+The unnecessarily complicated setup goes like this:
+
+- create an "interface" with DirectSoundCreate()
+- then call "interface" methods
+- the first method you must call is to SetCooperativeLevel()
+- then create the primary and secondary buffers
+- these both take structs for buffer descriptions and wave
+  (audio) formats, so it's a lot of setting up structs to make
+  calls and the parameters for the struct values are poorly
+  documented
+

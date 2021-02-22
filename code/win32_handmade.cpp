@@ -8,11 +8,20 @@
 #include <windows.h>
 #include <stdint.h>
 #include <xinput.h>
+#include <dsound.h>
+
+typedef uint8_t uint8;
+typedef int16_t int16;
+typedef uint32_t uint32;
+typedef int32_t int32;
+typedef int32_t bool32;
 
 #define internal static
 #define local_persist static
 #define global_variable static
 
+// --- Stubs for XInput (controllers) ---
+//
 /* Linking against xinput.lib *requires* player to have the DLLs for XBox360
  * controllers. But I want to make the controller optional.
  * So I do *not* link against xinput.lib. I do the following instead.
@@ -26,7 +35,7 @@
  * Now these xinput.lib calls default to stubs and the code builds without
  * linking against xinput.lib.
  */
-// NOTE(sustainablelab): XInputGetState
+// --- Stub XInputGetState ---
 #define X_INPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE *pState)
 typedef X_INPUT_GET_STATE(x_input_get_state);
 X_INPUT_GET_STATE(XInputGetStateStub)
@@ -36,7 +45,7 @@ X_INPUT_GET_STATE(XInputGetStateStub)
 global_variable x_input_get_state *XInputGetState_ = XInputGetStateStub;
 #define XInputGetState XInputGetState_
 
-// NOTE(sustainablelab): XInputSetState
+// --- Stubs XInputSetState ---
 #define X_INPUT_SET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_VIBRATION *pVibration)
 typedef X_INPUT_SET_STATE(x_input_set_state);
 X_INPUT_SET_STATE(XInputSetStateStub)
@@ -46,6 +55,116 @@ X_INPUT_SET_STATE(XInputSetStateStub)
 global_variable x_input_set_state *XInputSetState_ = XInputSetStateStub;
 #define XInputSetState XInputSetState_
 
+// --- Stubs for DirectSound (audio hardware) ---
+//
+// --- Stub DirectSoundCreate ---
+#define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
+typedef DIRECT_SOUND_CREATE(direct_sound_create);
+DIRECT_SOUND_CREATE(DirectSoundCreateStub)
+{
+    return(DSERR_GENERIC);
+}
+global_variable direct_sound_create *DirectSoundCreate_ = DirectSoundCreateStub;
+#define DirectSoundCreate DirectSoundCreate_
+
+internal void
+Win32InitDSound(HWND Window, int32 SamplesPerSecond, int32 BufferSize) // Setup audio hardware
+{
+    // Load the DirectSound library.
+    HMODULE DSoundLibrary = LoadLibraryA("dsound.dll");
+    if (DSoundLibrary) //  Set up audio. If DirectSound unavailable, do nothing.
+    {
+        // TODO(sustainablelab): load API funcs from .dll
+        DirectSoundCreate = (direct_sound_create *)GetProcAddress(DSoundLibrary, "DirectSoundCreate");
+
+        // NOTE(sustainablelab): Get a DirectSound object!
+        // --- DirectSound uses the Component Object Model (COM) disaster.
+        // Create "interface" IDirectSound using "DirectSoundCreate".
+        // https://docs.microsoft.com/en-us/previous-versions/windows/desktop/mt708922(v=vs.85)
+        IDirectSound *DirectSound;
+        if (SUCCEEDED(DirectSoundCreate(0, &DirectSound, 0)))
+        {
+            // Primary and Secondary buffers use the same WaveFormat.
+            WAVEFORMATEX WaveFormat = {};
+            WaveFormat.wFormatTag      = WAVE_FORMAT_PCM; // PCM audio format
+            WaveFormat.nChannels       = 2; // stereo is 2 channels
+            WaveFormat.nSamplesPerSec  = SamplesPerSecond; // e.g., 46kHz
+            WaveFormat.wBitsPerSample  = 16; // bits per sample of mono data
+            WaveFormat.nBlockAlign     = (WaveFormat.nChannels * WaveFormat.wBitsPerSample) / 8;
+            WaveFormat.nAvgBytesPerSec = SamplesPerSecond*WaveFormat.nBlockAlign;
+            WaveFormat.cbSize          = 0; // nbytes of extra infromation
+
+            // NOTE(docs.microsoft):
+            // The application must call the IDirectSound::SetCooperativeLevel
+            // method immediately after creating a DirectSound object.
+            if (SUCCEEDED(DirectSound->SetCooperativeLevel(Window, DSSCL_PRIORITY)))
+            {
+                // Use the "interface" to create DirectSound objects.
+
+                // NOTE(sustainablelab): Create a primary buffer
+                DSBUFFERDESC BufferDescription = {};
+                BufferDescription.dwSize = sizeof(BufferDescription);
+                BufferDescription.dwFlags = DSBCAPS_PRIMARYBUFFER;
+                BufferDescription.guid3DAlgorithm = DS3DALG_DEFAULT;
+                IDirectSoundBuffer *PrimaryBuffer;
+                HRESULT Error = DirectSound->CreateSoundBuffer(&BufferDescription, &PrimaryBuffer, 0);
+                if (SUCCEEDED(Error))
+                {
+                    HRESULT Error = PrimaryBuffer->SetFormat(&WaveFormat);
+                    if (SUCCEEDED(Error))
+                    {
+                    }
+                    else
+                    {
+                        // TODO(sustainablelab): Diagnostic
+                        OutputDebugStringA("Cannot set primary buffer audio format");
+                    }
+                }
+                else
+                {
+                    // TODO(sustainablelab): Diagnostic 
+                    OutputDebugStringA("Cannot create sound buffer");
+                }
+            }
+            else
+            {
+                // TODO(sustainablelab): Diagnostic
+                OutputDebugStringA("SetCooperativeLevel fail");
+            }
+            // NOTE(sustainablelab): Create a secondary buffer
+            DSBUFFERDESC BufferDescription = {};
+            BufferDescription.dwSize = sizeof(BufferDescription);
+            BufferDescription.dwFlags = 0;
+            BufferDescription.dwBufferBytes = BufferSize;
+            BufferDescription.lpwfxFormat = &WaveFormat;
+            BufferDescription.guid3DAlgorithm = DS3DALG_DEFAULT;
+            IDirectSoundBuffer *SecondaryBuffer;
+            if (SUCCEEDED(DirectSound->CreateSoundBuffer(
+                        &BufferDescription, &SecondaryBuffer, 0)))
+            {
+            }
+            else
+            {
+                // TODO(sustainablelab): Diagnostic
+                OutputDebugStringA("Cannot create secondary buffer");
+            }
+
+        }
+        else
+        {
+            // TODO(sustainablelab): Diagnostic
+            OutputDebugStringA("DirectSoundCreate fail");
+        }
+    }
+    else
+    {
+        // TODO(sustainablelab): Diagnostic
+        OutputDebugStringA("DirectSound dll unavailable");
+    }
+    // NOTE(sustainablelab): Start it playing
+    // SecondaryBuffer-> ;
+}
+
 internal void
 Win32LoadXInput(void) // Try to get XInput, use stubs if no XInput.
 {
@@ -53,6 +172,7 @@ Win32LoadXInput(void) // Try to get XInput, use stubs if no XInput.
     HMODULE XInputLibrary = LoadLibraryA("xinput1_4.dll");
     if (!XInputLibrary) // Try 1.3 if 1.4 is not available.
     {
+        // TODO(sustainablelab): Diagnostic (which version of dll is loaded)
         HMODULE XInputLibrary = LoadLibraryA("xinput1_3.dll");
     }
     if (XInputLibrary)
@@ -60,12 +180,11 @@ Win32LoadXInput(void) // Try to get XInput, use stubs if no XInput.
         XInputGetState = (x_input_get_state *)GetProcAddress(XInputLibrary, "XInputGetState");
         XInputSetState = (x_input_set_state *)GetProcAddress(XInputLibrary, "XInputSetState");
     }
+    else
+    {
+        // TODO(sustainablelab): Diagnostic (xinput dll not available)
+    }
 }
-
-typedef uint8_t uint8;
-typedef int16_t int16;
-typedef uint32_t uint32;
-typedef int32_t bool32;
 
 struct win32_offscreen_buffer // bitmap memory
 {
@@ -407,6 +526,13 @@ WinMain( // Program entry point
             // Initial state of weird gradient: no offset.
             int XOffset = 0;
             int YOffset = 0;
+
+            // --- Setup SOUND here ---
+            int32 AudioSeconds = 2;
+            int32 AudioChannels = 2; // Stereo
+            int32 SamplesPerSecond = 48000; // 48kHz sample rate
+            int32 BufferSize = SamplesPerSecond*AudioSeconds*AudioChannels*sizeof(int16); // size of audio buffer in bytes
+            Win32InitDSound(Window, SamplesPerSecond, BufferSize);
 
             // --- GAME LOOP ---
             GlobalRunning = true;
