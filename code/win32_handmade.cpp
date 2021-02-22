@@ -293,7 +293,7 @@ Win32ResizeDIBSection( // Alloc mem for bitmap buffer based on window size
     // NOTE(sustainablelab): Thanks Chris Hecker for eliminating
     // the need to make a DC (Device Context).
     int BitmapMemorySize = ( Buffer->Width * Buffer->Height ) * BytesPerPixel;
-    Buffer->Memory = VirtualAlloc(0, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+    Buffer->Memory = VirtualAlloc(0, BitmapMemorySize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
 
     Buffer->Pitch = Buffer->Width * BytesPerPixel;
     // TODO(sustainablelab): Clear to black

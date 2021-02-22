@@ -975,7 +975,19 @@ The unnecessarily complicated setup goes like this:
 - create an "interface" with DirectSoundCreate()
 - then call "interface" methods
 - the first method you must call is to SetCooperativeLevel()
-- then create the primary and secondary buffers
+- then create primary buffer
+    - anachronistic
+    - not a buffer
+    - repeat, not a buffer
+    - connects secondary buffer to soundcard without resampling
+        - used to be soundcard had some sample rate
+        - audio with a different sampe rate would get resampled
+        - nowadays not sure how this works, but not like this
+    - never writing audio to the primary buffer
+    - it's just our way of telling Windows to set up the
+      soundcard with a sample rate that matches the audio in the
+      game
+- then create secondary buffer <--- actually write sound here
 - these both take structs for buffer descriptions and wave
   (audio) formats, so it's a lot of setting up structs to make
   calls and the parameters for the struct values are poorly
