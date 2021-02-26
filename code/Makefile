@@ -6,6 +6,7 @@
 CFLAGS = /Zi /FC
 IMPORTLIBS = user32.lib gdi32.lib
 
+.PHONY: ..\build\win32_handmade.exe
 ..\build\win32_handmade.exe: win32_handmade.cpp
 	cl.exe $(CFLAGS) $(IMPORTLIBS) $< /Fe"$@"
 

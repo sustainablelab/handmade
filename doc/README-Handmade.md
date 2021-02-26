@@ -972,23 +972,42 @@ This API sucks. The docs suck.
 Instead of a simple function call API, its all object based.
 The unnecessarily complicated setup goes like this:
 
-- create an "interface" with DirectSoundCreate()
-- then call "interface" methods
-    - this is why we only have one GetProcAddress() for the
-      DirectSound .dll
-    - we need the procedure for DirectSoundCreate()
-    - after that, we have no choice, we have to use the Windows
-      COM (component object model) API
-    - the idea is that Windows wrote the DirectSound code in C++
+- create an `IDirectSound` "interface" with `DirectSoundCreate()`
+- then call "interface" methods to setup DirectSound
+- one of those methods is `CreateSoundBuffer`
+- `CreateSoundBuffer` returns a `IDirectSoundBuffer` interface
+- here is a link to the documentation for the
+  `IDirectSoundBuffer` methods:
+    - https://docs.microsoft.com/en-us/previous-versions/windows/desktop/mt708923(v=vs.85)
+    - that link is important
+        - it's not obvious how to find this stuff
+        - the documentation has lots of "old version" warnings,
+          so it seems like I'm in the wrong place even though I'm
+          in the right place
+        - the documentation is my only shot at finding these
+          functions because ctags doesn't see them
+    - I cannot use my usual `:make lib-tags` trick to get
+      signatures for these methods
+        - these are not defined in dsound.h like normal
+          functions: because they are organized in a COM, they
+          have unusual syntax that is invisible to ctags
+- because we have to use the interface methods, there is only one
+  function to load from the DirectSound `.dll` with
+  `GetProcAddress(DSoundLibrary, "DirectSoundCreate")`
+    - we need the procedure for `DirectSoundCreate()`
+    - but after that we have no choice, we have to use the
+      Windows COM (component object model) API
+- the idea behind the interface is that Windows wrote the
+  DirectSound code in C++
     - COM lets you access this code whether in C or C++
     - you create an interface
     - the interface has virtual functions
     - virtual functions are a second level of indirection -- the
       compiler outputs assembly that looks at the IDirectSound
       struct to find the address of its vtable, looks up the
-      address in the that vtable of the "method" we want to call,
-      then jumps to the actual method code (the function) to
-      execute it
+      address of the "method" in that vtable (the function we
+      want to call), then jumps to the actual function code to
+      execute
     - this is much less direct than simply calling a function,
       which is what we do with the GetProcAddress() trick, but
       like I said, Windows forces us to use the COM API to work
@@ -997,13 +1016,14 @@ The unnecessarily complicated setup goes like this:
 - then create primary buffer
     - anachronistic
     - not a buffer
-    - repeat, not a buffer
-    - connects secondary buffer to soundcard without resampling
+    - repeat, primary buffer is not an audio buffer
+    - the primary buffer connects the secondary buffer to
+      the soundcard without resampling
         - used to be soundcard had some sample rate
         - audio with a different sampe rate would get resampled
         - nowadays not sure how this works, but not like this
-    - never writing audio to the primary buffer
-    - we have no direct write privileges to the soundcard, just
+    - I am never writing audio to the primary buffer
+    - I have no direct write privileges to the soundcard, just
       like the graphics card
     - primary buffer is just how Windows wants us to tell Windows
       to set up the soundcard with a sample rate that matches the
@@ -1018,6 +1038,33 @@ The primary and secondary buffers both take structs for buffer
 descriptions and wave (audio) formats, so it's a lot of setting
 up structs to make calls and the parameters for the struct values
 are poorly documented. The calls are all indirect because of COM,
-so the assembly is may instructions to load addresses instead of
+so the assembly is many instructions to load addresses instead of
 a single `call` instruction to the function's address.
 
+```c
+                // See docs:
+                // https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee419014(v=vs.85)
+                // 1. Ascertain whether the buffer is ready to receive new data.
+                // This can be done either by polling the play cursor or by
+                // waiting for a notification.
+                // TODO: Buffer ready?
+                // 2. Lock a portion of the buffer by using
+                // IDirectSoundBuffer8::Lock. This method returns one or two
+                // addresses where data can now be written.
+                // 3. Write the audio data to the returned address or addresses
+                // by using a standard memory-copy routine.
+                // 4. Unlock the buffer using IDirectSoundBuffer8::Unlock.
+```
+
+## Floating point
+
+Most operations are floating point nowadays. All graphic stuff is
+floating point. Microsoft docs have a good writeup on floating
+point.
+
+https://docs.microsoft.com/en-us/cpp/build/ieee-floating-point-representation?view=msvc-160
+
+32-bit floating point math is faster. Can do 2x as many
+operations. So use floats unless doubles are necessary.
+
+e.g., float version of `sin` is `sinf`.

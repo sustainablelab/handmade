@@ -9,16 +9,37 @@
 #include <stdint.h>
 #include <xinput.h>
 #include <dsound.h>
+// temporary libraries to rip out later
+#include <math.h>
+#define Pi32 3.141592f
 
-typedef uint8_t uint8;
 typedef int16_t int16;
-typedef uint32_t uint32;
 typedef int32_t int32;
 typedef int32_t bool32;
+
+typedef uint8_t uint8;
+typedef uint32_t uint32;
+
+typedef float real32;  // sign bit,  8-bit exponent, 23-bit significand (2^23=8388608)
+typedef double real64; // sign bit, 11-bit exponent, 52-bit significand (2^52=4.5036e15)
 
 #define internal static
 #define local_persist static
 #define global_variable static
+
+struct win32_sound_output
+{
+    int32 SamplesPerSecond; // sample rate
+    int ToneHz; // periods per second
+    uint8 ToneVolume; // 16-bit in theory, but even 200 is loud.
+    uint32 RunningSampleIndex; // WaveIndex = RunningSampleIndex % WavePeriod
+    int WavePeriod; // samples per period
+    int32 AudioChannels; // Stereo (2 channel)
+    int32 BytesPerSample; // 16-bit audio * 2 channels
+    int32 AudioSeconds; // length of buffer in seconds
+    int32 SecondaryBufferSize; // size of audio buffer in bytes
+};
+
 
 struct win32_offscreen_buffer // bitmap memory
 {
@@ -39,6 +60,76 @@ global_variable win32_offscreen_buffer GlobalBackBuffer; // bitmap buffer
 global_variable IDirectSoundBuffer *GlobalSecondaryBuffer; // audio buffer
 global_variable bool GlobalRunning;
 
+internal void
+Win32FillSoundBuffer(
+    win32_sound_output *SoundOutput,
+    DWORD ByteToLock,
+    DWORD BytesToWrite
+    )
+{
+    // There are potentially two regions because it's a circular buffer.
+    // See ASCII-ART pictures.
+    VOID *Region1;
+    DWORD Region1Size;
+    VOID *Region2;
+    DWORD Region2Size;
+    HRESULT Error = GlobalSecondaryBuffer->Lock(
+        ByteToLock,  // DWORD dwOffset,
+        BytesToWrite,  // DWORD dwBytes,
+        &Region1,      // LPVOID * ppvAudioPtr1,
+        &Region1Size,  // LPDWORD  pdwAudioBytes1,
+        &Region2,      // LPVOID * ppvAudioPtr2,
+        &Region2Size,  // LPDWORD pdwAudioBytes2,
+        0              // DWORD dwFlags
+        );
+
+    // Write audio data.
+    // If there's no lock on the buffer, something seriously
+    // went wrong with the hardware and we don't want to make
+    // matters worse by writing to a bad address.
+    if (SUCCEEDED(Error))
+    {
+        // TODO(sustainablelab): assert Region1Size and Region2Size are valid
+
+        //  -Sample 0-    -Sample 1-    -Sample 2-   
+        //  int16 int16   int16 int16   int16 int16  
+        // |LEFT  RIGHT| |LEFT  RIGHT| |LEFT  RIGHT| 
+
+        DWORD Region1SampleCount = Region1Size/SoundOutput->BytesPerSample;
+        int16 *SampleOut = (int16 *)Region1;
+        for (DWORD SampleIndex = 0;
+                SampleIndex < Region1SampleCount;
+                ++SampleIndex)
+        {
+            real32 t = SoundOutput->RunningSampleIndex++ % SoundOutput->WavePeriod;
+            real32 SineValue = sinf(2*Pi32*t/SoundOutput->WavePeriod);
+            int16 SampleValue = (int16)(SineValue * SoundOutput->ToneVolume);
+            *SampleOut++ = SampleValue; // LEFT
+            *SampleOut++ = SampleValue; // RIGHT
+        }
+
+        DWORD Region2SampleCount = Region2Size/SoundOutput->BytesPerSample;
+        SampleOut = (int16 *)Region2;
+        for (DWORD SampleIndex = 0;
+                SampleIndex < Region2SampleCount;
+                ++SampleIndex)
+        {
+            real32 t = SoundOutput->RunningSampleIndex++ % SoundOutput->WavePeriod;
+            real32 SineValue = sinf(2*Pi32*t/SoundOutput->WavePeriod);
+            int16 SampleValue = (int16)(SineValue * SoundOutput->ToneVolume);
+            *SampleOut++ = SampleValue; // LEFT
+            *SampleOut++ = SampleValue; // RIGHT
+        }
+
+        // Unlock buffer.
+        Error = GlobalSecondaryBuffer->Unlock(
+            Region1,     // LPVOID pvAudioPtr1,
+            Region1Size, // DWORD dwAudioBytes1,
+            Region2,     // LPVOID pvAudioPtr2,
+            Region2Size  // DWORD dwAudioBytes2
+            );
+    }
+}
 
 // --- Stubs for XInput (controllers) ---
 //
@@ -88,11 +179,15 @@ global_variable direct_sound_create *DirectSoundCreate_ = DirectSoundCreateStub;
 #define DirectSoundCreate DirectSoundCreate_
 
 internal void
-Win32InitDSound(HWND Window, int32 SamplesPerSecond, int32 BufferSize) // Setup audio hardware
+Win32InitDSound( // Connect to audio hardware
+        HWND Window,            // Windows requires a window to make sound
+        int32 SamplesPerSecond, // Sample rate (typ 48kHz)
+        int32 BufferSize        // Audio buffer size  -- audio buffer is the "secondary" buffer
+        )
 {
     // Load the DirectSound library.
     HMODULE DSoundLibrary = LoadLibraryA("dsound.dll");
-    if (DSoundLibrary) //  Set up audio. If DirectSound unavailable, do nothing.
+    if (DSoundLibrary) //  Set up audio. If DirectSound unavailable, play game without sound.
     {
         // TODO(sustainablelab): load API funcs from .dll
         DirectSoundCreate = (direct_sound_create *)GetProcAddress(DSoundLibrary, "DirectSoundCreate");
@@ -180,8 +275,6 @@ Win32InitDSound(HWND Window, int32 SamplesPerSecond, int32 BufferSize) // Setup 
         // TODO(sustainablelab): Diagnostic
         OutputDebugStringA("DirectSound dll unavailable");
     }
-    // NOTE(sustainablelab): Start it playing
-    // SecondaryBuffer-> ;
 }
 
 internal void
@@ -524,16 +617,28 @@ WinMain( // Program entry point
             // forever because we are not sharing it with anyone.
             HDC DeviceContext = GetDC(Window);
 
+            // Note(sustainablelab): Graphics test
             // Initial state of weird gradient: no offset.
             int XOffset = 0;
             int YOffset = 0;
 
-            // --- Setup SOUND here ---
-            int32 AudioSeconds = 2;
-            int32 AudioChannels = 2; // Stereo
-            int32 SamplesPerSecond = 48000; // 48kHz sample rate
-            int32 BufferSize = SamplesPerSecond*AudioSeconds*AudioChannels*sizeof(int16); // size of audio buffer in bytes
-            Win32InitDSound(Window, SamplesPerSecond, BufferSize);
+            // Note(sustainablelab): Sound test
+            // ---Define a note to play---
+            win32_sound_output SoundOutput = {};
+
+            SoundOutput.SamplesPerSecond = 48000; // 48kHz sample rate
+            SoundOutput.ToneHz = 261; // periods per second
+            SoundOutput.ToneVolume = 200; // 16-bit in theory, but even 200 is loud.
+            SoundOutput.RunningSampleIndex = 0; // WaveIndex = RunningSampleIndex % WavePeriod
+            SoundOutput.WavePeriod = SoundOutput.SamplesPerSecond/SoundOutput.ToneHz; // samples per period
+            SoundOutput.AudioChannels = 2; // Stereo
+            SoundOutput.BytesPerSample = SoundOutput.AudioChannels*sizeof(int16);
+            SoundOutput.AudioSeconds = 1;
+            SoundOutput.SecondaryBufferSize = SoundOutput.SamplesPerSecond*SoundOutput.AudioSeconds*SoundOutput.BytesPerSample; // size of audio buffer in bytes
+            Win32InitDSound(Window, SoundOutput.SamplesPerSecond, SoundOutput.SecondaryBufferSize);
+            Win32FillSoundBuffer(&SoundOutput, 0, SoundOutput.SecondaryBufferSize);
+            // ---Loop audio until explicitly stopped.
+            GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
 
             // --- GAME LOOP ---
             GlobalRunning = true;
@@ -591,6 +696,56 @@ WinMain( // Program entry point
 
                 // Render some image
                 RenderWeirdGradient(&GlobalBackBuffer, XOffset, YOffset);
+
+                // ---Audio Test---
+
+                // Lock buffer for writing.
+                HRESULT Error;
+                DWORD PlayCursor;
+                DWORD WriteCursor;
+                Error = GlobalSecondaryBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor);
+                // If playcursor position is unknown, it is not safe to write audio to the buffer
+                if (SUCCEEDED(Error))
+                {
+
+                    // I want to lock starting at the byte pointed to by the WriteCursor.
+                    // But the WriteCursor is not updated for me.
+                    // I calculate the WriteCursor position myself.
+                    DWORD ByteToLock = (SoundOutput.RunningSampleIndex * SoundOutput.BytesPerSample) % SoundOutput.SecondaryBufferSize;
+
+                    // Calc num bytes to write: bytes from WriteCursor to PlayCursor
+                    DWORD BytesToWrite;
+
+                    // TODO(sustainablelab): Change this to use a lower latency
+                    // offset from the playcursor when we actually start having
+                    // sound effects. (Right now, Latency == AudioSeconds)
+                    if (ByteToLock == PlayCursor) // temporary case
+                    {
+                        BytesToWrite = 0;
+                    }
+                    else if (ByteToLock > PlayCursor)
+                    {
+                        //          P         W
+                        //          |         |
+                        //          v         v
+                        // |------------------------------| buff
+                        // |wwwwwwww----------wwwwwwwwwwww| w=write
+                        //  (pcurs)           (buff-wcurs)  calc bytes
+                        BytesToWrite = PlayCursor + (SoundOutput.SecondaryBufferSize - ByteToLock);
+                    }
+                    else
+                    {
+                        //          W         P
+                        //          |         |
+                        //          v         v
+                        // |------------------------------| buff
+                        // |--------wwwwwwwwww------------| w=write
+                        //        (pcurs-wcurs)             calc bytes
+                        BytesToWrite = PlayCursor - ByteToLock;
+                    }
+
+                    Win32FillSoundBuffer(&SoundOutput, ByteToLock, BytesToWrite);
+                }
 
                 // Blit
                 win32_window_dimension Dimension = Win32GetWindowDimension(Window);
